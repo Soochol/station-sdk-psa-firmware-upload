@@ -1,0 +1,143 @@
+name: stm32_firmware_upload
+version: "1.0.0"
+author: "Developer"
+description: "ST-LINK를 사용한 STM32 펌웨어 업로드 시퀀스"
+
+entry_point:
+  module: sequence
+  class: STM32FirmwareUpload
+
+modes:
+  automatic: true
+  manual: true
+  cli: true
+
+hardware:
+  stlink:
+    display_name: "ST-LINK Debugger"
+    driver: null  # CLI 기반, 별도 드라이버 불필요
+    config_schema:
+      connection_mode:
+        type: string
+        required: false
+        default: "swd"
+        description: "연결 모드 (swd, jtag)"
+
+parameters:
+  firmware_path:
+    display_name: "펌웨어 경로"
+    type: string
+    required: true
+    description: "업로드할 펌웨어 파일 경로 (.bin, .hex, .elf)"
+
+  programmer_path:
+    display_name: "프로그래머 경로"
+    type: string
+    required: false
+    default: "/opt/st/stm32cubeclt_1.20.0/STM32CubeProgrammer/bin/STM32_Programmer_CLI"
+    description: "STM32CubeProgrammer CLI 경로"
+
+  connection_mode:
+    display_name: "연결 모드"
+    type: string
+    required: false
+    default: "swd"
+    description: "ST-LINK 연결 모드 (swd, jtag)"
+
+  start_address:
+    display_name: "시작 주소"
+    type: string
+    required: false
+    default: "0x08000000"
+    description: "플래시 메모리 시작 주소"
+
+  erase:
+    display_name: "전체 지우기"
+    type: boolean
+    required: false
+    default: false
+    description: "업로드 전 플래시 전체 삭제 (false: 섹터 자동 지우기로 빠름)"
+
+  verify:
+    display_name: "검증 수행"
+    type: boolean
+    required: false
+    default: true
+    description: "업로드 후 펌웨어 검증 수행 여부"
+
+  reset:
+    display_name: "리셋 수행"
+    type: boolean
+    required: false
+    default: true
+    description: "업로드 후 MCU 리셋 수행 여부"
+
+  stop_on_failure:
+    display_name: "실패 시 중단"
+    type: boolean
+    required: false
+    default: true
+    description: "스텝 실패 시 즉시 시퀀스 중단"
+
+  # ST-LINK 연결 옵션 (양산용)
+  connect_mode:
+    display_name: "타겟 연결 모드"
+    type: string
+    required: false
+    default: "HOTPLUG"
+    description: "타겟 연결 모드 - NORMAL: 즉시 연결, HOTPLUG: 타겟 감지 대기 (양산용), UR: Under Reset 연결"
+
+  reset_mode:
+    display_name: "리셋 모드"
+    type: string
+    required: false
+    default: "HWrst"
+    description: "리셋 방식 - HWrst: 하드웨어 리셋, SWrst: 소프트웨어 리셋, Crst: 코어 리셋"
+
+  frequency:
+    display_name: "통신 속도"
+    type: integer
+    required: false
+    default: 4000
+    unit: "kHz"
+    description: "SWD/JTAG 통신 속도 (kHz)"
+
+steps:
+  - name: setup
+    display_name: "Setup"
+    order: 0
+    lifecycle: true
+    description: "하드웨어 초기화 및 설정 검증"
+
+  - name: check_connection
+    display_name: "ST-LINK 연결 확인"
+    order: 1
+    timeout: 30.0
+    description: "ST-LINK 디버거 연결 상태 확인"
+
+  - name: erase_chip
+    display_name: "플래시 메모리 지우기"
+    order: 2
+    timeout: 60.0
+    description: "MCU 플래시 메모리 전체 삭제"
+
+  - name: upload_firmware
+    display_name: "펌웨어 업로드"
+    order: 3
+    timeout: 120.0
+    description: "펌웨어 파일을 MCU에 업로드"
+
+  - name: verify_firmware
+    display_name: "펌웨어 검증"
+    order: 4
+    timeout: 60.0
+    description: "업로드된 펌웨어 무결성 검증"
+
+  - name: teardown
+    display_name: "Teardown"
+    order: 5
+    lifecycle: true
+    description: "리소스 정리"
+
+dependencies:
+  python: []

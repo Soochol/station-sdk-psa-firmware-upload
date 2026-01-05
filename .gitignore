@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Claude Code local settings
+.claude/
+
+# Firmware binaries (test files)
+firmwares/
+
+# Test config (optional)
+sequences/*/config.json
