@@ -5,8 +5,5 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "station-service-sdk",
+    "station-service-sdk>=1.0.2",
 ]
-
-[tool.uv.sources]
-station-service-sdk = { git = "https://github.com/Soochol/station-service-sdk" }

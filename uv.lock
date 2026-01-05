@@ -124,15 +124,19 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "station-service-sdk", git = "https://github.com/Soochol/station-service-sdk" }]
+requires-dist = [{ name = "station-service-sdk", specifier = ">=1.0.2" }]
 
 [[package]]
 name = "station-service-sdk"
-version = "3.0.0"
-source = { git = "https://github.com/Soochol/station-service-sdk#bc7c1e2f62b4c982bfae8c31e7627a79936e9f1c" }
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4c/32/eef3f0ea4c6649b3272b7e958548da8e7bc191da9aa6e85460ab3416048c/station_service_sdk-1.0.2.tar.gz", hash = "sha256:3e0e72649804aa31afff0cb5c81e4f7b42ff16c2e5f1d0a8978f16908db6e506", size = 60664, upload-time = "2026-01-05T02:33:40.208Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/fa/ec5f3b8a899120f0303ec46553bf2c89196dbcde351edb862572b892a126/station_service_sdk-1.0.2-py3-none-any.whl", hash = "sha256:157c6f0b7ddca7d4bb7c722142b88af57af0a076e8121ad679d2991e52765b72", size = 65497, upload-time = "2026-01-05T02:33:37.909Z" },
 ]
 
 [[package]]
