@@ -68,8 +68,7 @@ class STM32FirmwareUpload(SequenceBase):
         self.emit_log("info", f"Firmware file: {self.firmware_path} ({self.firmware_size} bytes)")
 
         # STM32CubeProgrammer CLI 검증
-        if not Path(self.programmer_path).exists():
-            raise SetupError(f"STM32CubeProgrammer not found: {self.programmer_path}")
+        await self._validate_programmer()
 
         self.emit_log("info", "Setup completed successfully")
 
@@ -98,9 +97,6 @@ class STM32FirmwareUpload(SequenceBase):
             if not connected:
                 raise HardwareError("ST-LINK not detected")
 
-            measurements["stlink_connected"] = True
-            measurements["stlink_serial"] = stlink_info.get("serial", "unknown")
-            self.emit_measurement("stlink_connected", True, "", passed=True)
             self.emit_log("info", f"ST-LINK detected: {stlink_info}")
             self.emit_step_complete("check_connection", current_step, True, time.time() - step_start)
         except Exception as e:
@@ -123,8 +119,6 @@ class STM32FirmwareUpload(SequenceBase):
                 if not erase_success:
                     raise HardwareError("Failed to erase flash memory")
 
-                measurements["flash_erased"] = True
-                self.emit_measurement("flash_erased", True, "", passed=True)
                 self.emit_step_complete("erase_chip", current_step, True, time.time() - step_start)
             except Exception as e:
                 self.emit_error("ERASE_ERROR", str(e))
@@ -150,14 +144,6 @@ class STM32FirmwareUpload(SequenceBase):
                 if not upload_success:
                     raise HardwareError("Failed to upload firmware")
 
-                upload_speed = self.firmware_size / upload_time if upload_time > 0 else 0
-                measurements["upload_time"] = upload_time
-                measurements["upload_speed_bps"] = upload_speed
-                measurements["firmware_size"] = self.firmware_size
-
-                self.emit_measurement("upload_time", upload_time, "s", passed=True)
-                self.emit_measurement("upload_speed", upload_speed / 1024, "KB/s", passed=True)
-                self.emit_measurement("firmware_size", self.firmware_size, "bytes", passed=True)
                 self.emit_step_complete("upload_firmware", current_step, True, time.time() - step_start)
             except Exception as e:
                 self.emit_error("UPLOAD_ERROR", str(e))
@@ -175,14 +161,11 @@ class STM32FirmwareUpload(SequenceBase):
             step_start = time.time()
 
             if verify_result:
-                measurements["verification_passed"] = True
-                self.emit_measurement("verification_passed", True, "", passed=True)
                 self.emit_step_complete("verify_firmware", current_step, True, time.time() - step_start)
             else:
                 self.emit_error("VERIFY_ERROR", "Firmware verification failed")
                 self.emit_step_complete("verify_firmware", current_step, False, time.time() - step_start, error="Firmware verification failed")
                 passed = False
-                measurements["verification_passed"] = False
                 stopped_at = stopped_at or "verify_firmware"
 
         # 리셋 (선택적)
@@ -227,6 +210,84 @@ class STM32FirmwareUpload(SequenceBase):
     # =========================================================================
     # Private Methods
     # =========================================================================
+
+    # 일반적인 STM32CubeProgrammer 설치 경로들
+    COMMON_PROGRAMMER_PATHS = [
+        "/opt/st/stm32cubeclt_1.20.0/STM32CubeProgrammer/bin/STM32_Programmer_CLI",
+        "/opt/st/stm32cubeide_1.17.0/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.linux64_2.2.100.202406141446/tools/bin/STM32_Programmer_CLI",
+        "/usr/local/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI",
+        "/opt/STM32CubeProgrammer/bin/STM32_Programmer_CLI",
+        # Windows paths
+        "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI.exe",
+        "C:/ST/STM32CubeCLT/STM32CubeProgrammer/bin/STM32_Programmer_CLI.exe",
+    ]
+
+    async def _validate_programmer(self) -> None:
+        """STM32CubeProgrammer CLI 설치 검증"""
+        programmer_path = Path(self.programmer_path)
+
+        # 1. 지정된 경로 확인
+        if not programmer_path.exists():
+            # 대안 경로 검색
+            found_path = None
+            for alt_path in self.COMMON_PROGRAMMER_PATHS:
+                if Path(alt_path).exists():
+                    found_path = alt_path
+                    break
+
+            error_msg = f"STM32CubeProgrammer CLI not found: {self.programmer_path}"
+
+            if found_path:
+                error_msg += f"\n\n  Found at alternative location: {found_path}"
+                error_msg += f"\n  Update 'programmer_path' parameter to use this path."
+            else:
+                error_msg += "\n\n  STM32CubeProgrammer is not installed."
+                error_msg += "\n  Please install STM32CubeCLT or STM32CubeProgrammer:"
+                error_msg += "\n  - Download: https://www.st.com/en/development-tools/stm32cubeprog.html"
+                error_msg += "\n  - Linux: Install to /opt/st/ or /usr/local/STMicroelectronics/"
+                error_msg += "\n  - After installation, set 'programmer_path' parameter correctly."
+
+            raise SetupError(error_msg)
+
+        # 2. 실행 권한 확인 (Linux/macOS)
+        import os
+        if os.name != 'nt' and not os.access(programmer_path, os.X_OK):
+            raise SetupError(
+                f"STM32CubeProgrammer CLI is not executable: {self.programmer_path}\n"
+                f"  Run: chmod +x {self.programmer_path}"
+            )
+
+        # 3. 실제 실행 가능 여부 확인 (버전 출력 테스트)
+        try:
+            process = await asyncio.create_subprocess_exec(
+                str(programmer_path), "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
+            output = stdout.decode() + stderr.decode()
+
+            if "STM32CubeProgrammer" in output or process.returncode == 0:
+                # 버전 정보 추출 시도
+                for line in output.split("\n"):
+                    if "version" in line.lower() or "STM32CubeProgrammer" in line:
+                        self.emit_log("info", f"Programmer: {line.strip()}")
+                        break
+                else:
+                    self.emit_log("info", f"STM32CubeProgrammer CLI verified: {self.programmer_path}")
+            else:
+                raise SetupError(
+                    f"STM32CubeProgrammer CLI failed to execute:\n{output}"
+                )
+        except asyncio.TimeoutError:
+            raise SetupError("STM32CubeProgrammer CLI timed out during version check")
+        except FileNotFoundError:
+            raise SetupError(
+                f"STM32CubeProgrammer CLI not found or missing dependencies: {self.programmer_path}\n"
+                "  Check if all required libraries are installed."
+            )
+        except Exception as e:
+            raise SetupError(f"Failed to verify STM32CubeProgrammer CLI: {e}")
 
     def _build_connect_args(self) -> str:
         """ST-LINK 연결 인자 문자열 생성"""

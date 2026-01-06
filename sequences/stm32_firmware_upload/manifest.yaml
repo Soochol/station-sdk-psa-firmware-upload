@@ -1,5 +1,5 @@
 name: stm32_firmware_upload
-version: "1.0.0"
+version: "1.0.3"
 author: "Developer"
 description: "ST-LINK를 사용한 STM32 펌웨어 업로드 시퀀스"
 

@@ -124,19 +124,19 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "station-service-sdk", specifier = ">=1.0.2" }]
+requires-dist = [{ name = "station-service-sdk", specifier = ">=1.0.6" }]
 
 [[package]]
 name = "station-service-sdk"
-version = "1.0.4"
+version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/9c/0ff8f46f4d3ad55affb3636e88f7ecf1dfdb476ebeccfe43c20604956b6e/station_service_sdk-1.0.4.tar.gz", hash = "sha256:ea4734ecd22280f9e1c9831447c45494407c7fde44431a792cbf8de2bbba4c54", size = 66819, upload-time = "2026-01-05T07:05:37.907Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/72/efc4052a2743c22a957b3f30288490f7009546fc0c0d68e06348427b5343/station_service_sdk-1.0.6.tar.gz", hash = "sha256:dd77b26a283cfaa8b5c76b9c314dbcf4caceb3d57223034dc75d78f019b33f16", size = 70233, upload-time = "2026-01-06T03:39:01.272Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/e6/9c2ebc7baf175eece82a4f9e267d9500e2d082460dbcf197c59eeca66944/station_service_sdk-1.0.4-py3-none-any.whl", hash = "sha256:706a20ee095b788743a1e61928088f0e0e78428b16fc15cc085ba94765a722fb", size = 70667, upload-time = "2026-01-05T07:05:36.129Z" },
+    { url = "https://files.pythonhosted.org/packages/95/6e/8554a1aa2c611494ca1818fef028129ec1ca6ddf0adefd31114edd2b6b89/station_service_sdk-1.0.6-py3-none-any.whl", hash = "sha256:528e798181adeef5701974caeb23c67049e676481f16ff1fc0bf019a67d7d48d", size = 74301, upload-time = "2026-01-06T03:38:59.964Z" },
 ]
 
 [[package]]
