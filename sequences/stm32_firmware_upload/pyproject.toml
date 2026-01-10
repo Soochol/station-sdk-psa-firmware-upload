@@ -3,4 +3,6 @@ name = "stm32-firmware-upload"
 version = "2.0.0"
 description = "STM32 firmware upload sequence using STM32CubeProgrammer"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "loguru>=0.7.0",
+]
