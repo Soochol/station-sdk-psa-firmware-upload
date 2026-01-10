@@ -25,7 +25,7 @@ parameters:
     display_name: "프로그래머 경로"
     type: string
     required: false
-    default: "/opt/st/stm32cubeclt_1.20.0/STM32CubeProgrammer/bin/STM32_Programmer_CLI"
+    default: "C:/Program Files/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin/STM32_Programmer_CLI.exe"
     description: "STM32CubeProgrammer CLI 경로"
 
   connection_mode:
