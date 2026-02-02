@@ -258,16 +258,46 @@ class STM32FirmwareUpload(SequenceBase):
             )
 
         # 3. 실제 실행 가능 여부 확인 (버전 출력 테스트)
-        try:
-            process = await asyncio.create_subprocess_exec(
-                str(programmer_path), "--version",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=10)
-            output = stdout.decode() + stderr.decode()
+        import subprocess
+        import traceback
 
-            if "STM32CubeProgrammer" in output or process.returncode == 0:
+        self.emit_log("debug", f"Validating programmer at: {programmer_path}")
+
+        try:
+            # PyInstaller 환경에서 안정적인 실행을 위해 shell=False 사용
+            # Windows에서 콘솔 창이 뜨지 않도록 CREATE_NO_WINDOW 플래그 사용
+            import os
+            cmd_list = [str(programmer_path), "--version"]
+            self.emit_log("debug", f"Running: {cmd_list}")
+
+            if os.name == 'nt':
+                # Windows: shell=False + CREATE_NO_WINDOW (PyInstaller 호환)
+                # encoding='utf-8' + errors='replace'로 cp949 디코딩 에러 방지
+                CREATE_NO_WINDOW = 0x08000000
+                result = subprocess.run(
+                    cmd_list,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    shell=False,
+                    creationflags=CREATE_NO_WINDOW,
+                    encoding='utf-8',
+                    errors='replace',
+                )
+            else:
+                result = subprocess.run(
+                    cmd_list,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+            # stdout/stderr가 None일 수 있으므로 안전하게 처리
+            stdout = result.stdout or ""
+            stderr = result.stderr or ""
+            output = stdout + stderr
+            self.emit_log("debug", f"Programmer output: {output[:200]}...")
+
+            if "STM32CubeProgrammer" in output or result.returncode == 0:
                 # 버전 정보 추출 시도
                 for line in output.split("\n"):
                     if "version" in line.lower() or "STM32CubeProgrammer" in line:
@@ -277,17 +307,29 @@ class STM32FirmwareUpload(SequenceBase):
                     self.emit_log("info", f"STM32CubeProgrammer CLI verified: {self.programmer_path}")
             else:
                 raise SetupError(
-                    f"STM32CubeProgrammer CLI failed to execute:\n{output}"
+                    f"STM32CubeProgrammer CLI failed to execute (rc={result.returncode}):\n{output}"
                 )
-        except asyncio.TimeoutError:
+        except subprocess.TimeoutExpired:
             raise SetupError("STM32CubeProgrammer CLI timed out during version check")
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             raise SetupError(
-                f"STM32CubeProgrammer CLI not found or missing dependencies: {self.programmer_path}\n"
+                f"STM32CubeProgrammer CLI not found: {self.programmer_path}\n"
+                f"  Error: {e}\n"
                 "  Check if all required libraries are installed."
             )
+        except OSError as e:
+            # Windows에서 DLL 로드 실패 등의 상세 에러 캡처
+            raise SetupError(
+                f"STM32CubeProgrammer CLI execution failed: {self.programmer_path}\n"
+                f"  OSError: {e}\n"
+                f"  WinError: {getattr(e, 'winerror', 'N/A')}\n"
+                "  Check if Visual C++ Redistributable is installed."
+            )
+        except SetupError:
+            raise
         except Exception as e:
-            raise SetupError(f"Failed to verify STM32CubeProgrammer CLI: {e}")
+            tb = traceback.format_exc()
+            raise SetupError(f"Failed to verify STM32CubeProgrammer CLI: {type(e).__name__}: {e}\n{tb}")
 
     def _build_connect_args(self) -> str:
         """ST-LINK 연결 인자 문자열 생성"""
@@ -310,35 +352,70 @@ class STM32FirmwareUpload(SequenceBase):
 
     async def _run_programmer_cmd(self, args: list) -> tuple[bool, str]:
         """STM32CubeProgrammer CLI 명령 실행"""
-        cmd = [self.programmer_path] + args
-        self.emit_log("debug", f"Running: {' '.join(cmd)}")
+        import subprocess
+        import os
+        import traceback
+
+        cmd_list = [self.programmer_path] + args
+        self.emit_log("debug", f"Running: {' '.join(cmd_list)}")
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=120  # 2분 타임아웃
-            )
+            # Note: subprocess.run 사용 (asyncio.create_subprocess_exec는 Windows embedded Python에서 문제 발생)
+            # run_in_executor로 블로킹 방지
+            loop = asyncio.get_running_loop()
 
-            output = stdout.decode() + stderr.decode()
-            success = process.returncode == 0
+            def run_cmd():
+                if os.name == 'nt':
+                    # Windows: shell=False + CREATE_NO_WINDOW (PyInstaller 호환)
+                    # encoding='utf-8' + errors='replace'로 cp949 디코딩 에러 방지
+                    CREATE_NO_WINDOW = 0x08000000
+                    return subprocess.run(
+                        cmd_list,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                        shell=False,
+                        creationflags=CREATE_NO_WINDOW,
+                        encoding='utf-8',
+                        errors='replace',
+                    )
+                else:
+                    return subprocess.run(
+                        cmd_list,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+
+            result = await loop.run_in_executor(None, run_cmd)
+
+            # stdout/stderr가 None일 수 있으므로 안전하게 처리
+            stdout = result.stdout or ""
+            stderr = result.stderr or ""
+            output = stdout + stderr
+            success = result.returncode == 0
 
             if not success:
-                self.emit_log("error", f"Command failed: {output}")
+                self.emit_log("error", f"Command failed (rc={result.returncode}): {output[:500]}")
 
             return success, output
-        except asyncio.TimeoutError:
+        except subprocess.TimeoutExpired:
             raise HardwareError("Programmer command timed out")
+        except OSError as e:
+            # Windows에서 DLL 로드 실패 등의 상세 에러 캡처
+            raise HardwareError(
+                f"Failed to run programmer - OSError: {e} "
+                f"(winerror={getattr(e, 'winerror', 'N/A')})"
+            )
         except Exception as e:
-            raise HardwareError(f"Failed to run programmer: {e}")
+            tb = traceback.format_exc()
+            raise HardwareError(f"Failed to run programmer: {type(e).__name__}: {e}\n{tb}")
 
     async def _check_stlink_connection(self) -> tuple[bool, dict]:
         """ST-LINK 연결 상태 확인"""
-        _, output = await self._run_programmer_cmd(["-c", self._build_connect_args(), "-l"])
+        # 연결 인자를 개별 인자로 분리 (예: "port=SWD mode=HOTPLUG" -> ["port=SWD", "mode=HOTPLUG"])
+        connect_args = self._build_connect_args().split()
+        _, output = await self._run_programmer_cmd(["-c"] + connect_args + ["-l"])
 
         # Device ID가 출력에 있으면 MCU 연결된 것으로 판단
         # (CLI가 -l 옵션에서 exit code 0을 반환하지 않을 수 있음)
@@ -362,10 +439,10 @@ class STM32FirmwareUpload(SequenceBase):
 
     async def _erase_flash(self) -> bool:
         """플래시 메모리 전체 삭제"""
-        success, _ = await self._run_programmer_cmd([
-            "-c", self._build_connect_args(),
-            "-e", "all"
-        ])
+        connect_args = self._build_connect_args().split()
+        success, _ = await self._run_programmer_cmd(
+            ["-c"] + connect_args + ["-e", "all"]
+        )
         return success
 
     async def _upload_firmware(self, verify: bool = False) -> tuple[bool, float, bool]:
@@ -379,8 +456,8 @@ class STM32FirmwareUpload(SequenceBase):
         """
         start_time = time.time()
 
-        args = [
-            "-c", self._build_connect_args(),
+        connect_args = self._build_connect_args().split()
+        args = ["-c"] + connect_args + [
             "-w", self.firmware_path,
             self.start_address,
         ]
@@ -404,10 +481,10 @@ class STM32FirmwareUpload(SequenceBase):
 
     async def _reset_target(self) -> bool:
         """타겟 리셋"""
-        success, _ = await self._run_programmer_cmd([
-            "-c", self._build_connect_args(),
-            "-rst"
-        ])
+        connect_args = self._build_connect_args().split()
+        success, _ = await self._run_programmer_cmd(
+            ["-c"] + connect_args + ["-rst"]
+        )
         return success
 
 
